@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Stickers">
+    <link rel="apple-touch-icon" href="icon.png">
+    
+    <title>IRL Stickers</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        body {
+            background-color: #111;
+            font-family: -apple-system, sans-serif;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            padding: 20px;
+            padding-top: 60px; 
+            padding-bottom: 100px; /* Room for the add button */
+        }
+
+        .grid-item {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            object-fit: cover;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* The new floating Add Button */
+        #add-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        #add-btn:active {
+            background-color: #005bb5;
+        }
+
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        #overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #overlay-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- The grid is now empty by default, images populate from the database -->
+    <div id="grid" class="grid-container"></div>
+
+    <!-- The Add button triggers the hidden file input -->
+    <button id="add-btn" onclick="document.getElementById('fileInput').click()">+</button>
+    <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleFiles(this.files)">
+
+    <div id="overlay" onclick="hideSticker()">
+        <img id="overlay-image" src="">
+    </div>
+
+    <script>
+        const overlay = document.getElementById('overlay');
+        const overlayImage = document.getElementById('overlay-image');
+        let db;
+
+        // 1. Open the local database
+        const request = indexedDB.open("StickerDatabase", 1);
+
+        request.onupgradeneeded = function(e) {
+            db = e.target.result;
+            // Create a "table" for stickers
+            db.createObjectStore("stickers", { autoIncrement: true });
+        };
+
+        request.onsuccess = function(e) {
+            db = e.target.result;
+            loadStickers(); // Load images when the app opens
+        };
+
+        // 2. Handle uploaded files
+        function handleFiles(files) {
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const transaction = db.transaction(["stickers"], "readwrite");
+                const store = transaction.objectStore("stickers");
+                
+                // Save the raw image file directly to the phone's storage
+                store.add(file);
+                transaction.oncomplete = () => loadStickers();
+            }
+        }
+
+        // 3. Display the images from the database
+        function loadStickers() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = ''; 
+            
+            const transaction = db.transaction(["stickers"], "readonly");
+            const store = transaction.objectStore("stickers");
+            const request = store.openCursor();
+            
+            request.onsuccess = function(e) {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const img = document.createElement('img');
+                    // Create a temporary URL to display the stored file
+                    img.src = URL.createObjectURL(cursor.value);
+                    img.className = 'grid-item';
+                    img.onclick = function() { showSticker(this.src); };
+                    
+                    grid.appendChild(img);
+                    cursor.continue(); // Move to the next image
+                }
+            };
+        }
+
+        // 4. Full screen logic
+        function showSticker(src) {
+            overlayImage.src = src;
+            overlay.classList.add('active');
+        }
+
+        function hideSticker() {
+            overlay.classList.remove('active');
+            setTimeout(() => { overlayImage.src = ""; }, 200); 
+        }
+    </script>
+</body>
+</html>
