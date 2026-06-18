@@ -22,27 +22,94 @@
         body {
             background-color: #111;
             font-family: -apple-system, sans-serif;
+            color: white;
+        }
+
+        /* Top navigation bar for the Edit button */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50px;
+            background-color: rgba(20, 20, 20, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            padding: 0 20px;
+            padding-top: env(safe-area-inset-top); /* Clears the iPhone notch dynamically */
+            z-index: 50;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: #007aff;
+            font-size: 17px;
+            font-weight: 600;
+            cursor: pointer;
         }
 
         .grid-container {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-            gap: 10px;
+            gap: 15px;
             padding: 20px;
-            padding-top: 60px; 
-            padding-bottom: 100px; /* Room for the add button */
+            padding-top: calc(70px + env(safe-area-inset-top)); 
+            padding-bottom: 100px;
+        }
+
+        /* Wrapper to hold both the sticker image and the delete badge */
+        .sticker-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
         }
 
         .grid-item {
             width: 100%;
-            aspect-ratio: 1 / 1;
+            height: 100%;
             object-fit: cover;
             border-radius: 12px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
         }
 
-        /* The new floating Add Button */
+        /* Little animation when in edit mode */
+        .editing .grid-item {
+            transform: scale(0.95);
+            opacity: 0.8;
+        }
+
+        /* The Red Delete Badge */
+        .delete-badge {
+            display: none;
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            background-color: #ff3b30;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            font-size: 14px;
+            font-weight: bold;
+            line-height: 24px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        /* Show delete badges only when the app is in editing mode */
+        .editing .delete-badge {
+            display: block;
+        }
+
         #add-btn {
             position: fixed;
             bottom: 30px;
@@ -57,10 +124,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
             cursor: pointer;
             z-index: 100;
-        }
-
-        #add-btn:active {
-            background-color: #005bb5;
         }
 
         #overlay {
@@ -93,10 +156,12 @@
 </head>
 <body>
 
-    <!-- The grid is now empty by default, images populate from the database -->
+    <div class="nav-bar">
+        <button id="edit-btn" class="nav-btn" onclick="toggleEditMode()">Edit</button>
+    </div>
+
     <div id="grid" class="grid-container"></div>
 
-    <!-- The Add button triggers the hidden file input -->
     <button id="add-btn" onclick="document.getElementById('fileInput').click()">+</button>
     <input type="file" id="fileInput" accept="image/*" multiple style="display: none;" onchange="handleFiles(this.files)">
 
@@ -107,40 +172,45 @@
     <script>
         const overlay = document.getElementById('overlay');
         const overlayImage = document.getElementById('overlay-image');
+        const editBtn = document.getElementById('edit-btn');
+        const grid = document.getElementById('grid');
         let db;
+        let isEditing = false;
 
-        // 1. Open the local database
+        // Open Database
         const request = indexedDB.open("StickerDatabase", 1);
-
         request.onupgradeneeded = function(e) {
             db = e.target.result;
-            // Create a "table" for stickers
             db.createObjectStore("stickers", { autoIncrement: true });
         };
-
         request.onsuccess = function(e) {
             db = e.target.result;
-            loadStickers(); // Load images when the app opens
+            loadStickers();
         };
 
-        // 2. Handle uploaded files
+        function toggleEditMode() {
+            isEditing = !isEditing;
+            if (isEditing) {
+                grid.classList.add('editing');
+                editBtn.innerText = "Done";
+            } else {
+                grid.classList.remove('editing');
+                editBtn.innerText = "Edit";
+            }
+        }
+
         function handleFiles(files) {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const transaction = db.transaction(["stickers"], "readwrite");
                 const store = transaction.objectStore("stickers");
-                
-                // Save the raw image file directly to the phone's storage
                 store.add(file);
                 transaction.oncomplete = () => loadStickers();
             }
         }
 
-        // 3. Display the images from the database
         function loadStickers() {
-            const grid = document.getElementById('grid');
             grid.innerHTML = ''; 
-            
             const transaction = db.transaction(["stickers"], "readonly");
             const store = transaction.objectStore("stickers");
             const request = store.openCursor();
@@ -148,19 +218,50 @@
             request.onsuccess = function(e) {
                 const cursor = e.target.result;
                 if (cursor) {
+                    const id = cursor.key; // Grab the unique database ID for this specific image
+
+                    // Create wrapper
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'sticker-wrapper';
+
+                    // Create image
                     const img = document.createElement('img');
-                    // Create a temporary URL to display the stored file
                     img.src = URL.createObjectURL(cursor.value);
                     img.className = 'grid-item';
-                    img.onclick = function() { showSticker(this.src); };
+                    img.onclick = function() { 
+                        if (!isEditing) showSticker(this.src); 
+                    };
                     
-                    grid.appendChild(img);
-                    cursor.continue(); // Move to the next image
+                    // Create delete badge
+                    const deleteBadge = document.createElement('button');
+                    deleteBadge.className = 'delete-badge';
+                    deleteBadge.innerText = '✕';
+                    deleteBadge.onclick = function() { deleteSticker(id); };
+
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(deleteBadge);
+                    grid.appendChild(wrapper);
+                    
+                    cursor.continue();
                 }
             };
         }
 
-        // 4. Full screen logic
+        // Delete photo function
+        function deleteSticker(id) {
+            const transaction = db.transaction(["stickers"], "readwrite");
+            const store = transaction.objectStore("stickers");
+            store.delete(id); // Delete from IndexedDB using the unique ID
+            
+            transaction.oncomplete = () => {
+                loadStickers();
+                // If we deleted the last item, automatically clean up UI state
+                if (grid.children.length === 0 && isEditing) {
+                    toggleEditMode();
+                }
+            };
+        }
+
         function showSticker(src) {
             overlayImage.src = src;
             overlay.classList.add('active');
