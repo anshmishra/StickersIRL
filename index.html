@@ -25,7 +25,6 @@
             color: white;
         }
 
-        /* Top navigation bar for the Edit button */
         .nav-bar {
             position: fixed;
             top: 0;
@@ -39,7 +38,7 @@
             justify-content: flex-end;
             align-items: center;
             padding: 0 20px;
-            padding-top: env(safe-area-inset-top); /* Clears the iPhone notch dynamically */
+            padding-top: env(safe-area-inset-top);
             z-index: 50;
         }
 
@@ -61,7 +60,6 @@
             padding-bottom: 100px;
         }
 
-        /* Wrapper to hold both the sticker image and the delete badge */
         .sticker-wrapper {
             position: relative;
             width: 100%;
@@ -78,13 +76,11 @@
             transition: transform 0.2s;
         }
 
-        /* Little animation when in edit mode */
         .editing .grid-item {
             transform: scale(0.95);
             opacity: 0.8;
         }
 
-        /* The Red Delete Badge */
         .delete-badge {
             display: none;
             position: absolute;
@@ -105,7 +101,6 @@
             cursor: pointer;
         }
 
-        /* Show delete badges only when the app is in editing mode */
         .editing .delete-badge {
             display: block;
         }
@@ -139,7 +134,7 @@
             z-index: 9999;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.2s ease-in-out;
+            transition: opacity 0.15s ease-in-out;
         }
 
         #overlay.active {
@@ -147,10 +142,14 @@
             pointer-events: auto;
         }
 
-        #overlay-image {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+        .img-landscape {
+            width: 100vw !important;
+            height: auto !important;
+        }
+
+        .img-portrait {
+            width: auto !important;
+            height: 100vh !important;
         }
     </style>
 </head>
@@ -177,7 +176,6 @@
         let db;
         let isEditing = false;
 
-        // Open Database
         const request = indexedDB.open("StickerDatabase", 1);
         request.onupgradeneeded = function(e) {
             db = e.target.result;
@@ -188,6 +186,7 @@
             loadStickers();
         };
 
+        // UI Modes
         function toggleEditMode() {
             isEditing = !isEditing;
             if (isEditing) {
@@ -199,6 +198,7 @@
             }
         }
 
+        // Database Operations
         function handleFiles(files) {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
@@ -218,13 +218,11 @@
             request.onsuccess = function(e) {
                 const cursor = e.target.result;
                 if (cursor) {
-                    const id = cursor.key; // Grab the unique database ID for this specific image
+                    const id = cursor.key;
 
-                    // Create wrapper
                     const wrapper = document.createElement('div');
                     wrapper.className = 'sticker-wrapper';
 
-                    // Create image
                     const img = document.createElement('img');
                     img.src = URL.createObjectURL(cursor.value);
                     img.className = 'grid-item';
@@ -232,7 +230,6 @@
                         if (!isEditing) showSticker(this.src); 
                     };
                     
-                    // Create delete badge
                     const deleteBadge = document.createElement('button');
                     deleteBadge.className = 'delete-badge';
                     deleteBadge.innerText = '✕';
@@ -247,29 +244,40 @@
             };
         }
 
-        // Delete photo function
         function deleteSticker(id) {
             const transaction = db.transaction(["stickers"], "readwrite");
             const store = transaction.objectStore("stickers");
-            store.delete(id); // Delete from IndexedDB using the unique ID
-            
+            store.delete(id);
             transaction.oncomplete = () => {
                 loadStickers();
-                // If we deleted the last item, automatically clean up UI state
                 if (grid.children.length === 0 && isEditing) {
                     toggleEditMode();
                 }
             };
         }
 
+        // Presentation Logic
         function showSticker(src) {
+            overlayImage.className = ''; 
+            
+            overlayImage.onload = function() {
+                if (this.naturalWidth >= this.naturalHeight) {
+                    this.classList.add('img-landscape');
+                } else {
+                    this.classList.add('img-portrait');
+                }
+                overlay.classList.add('active');
+            };
+
             overlayImage.src = src;
-            overlay.classList.add('active');
         }
 
         function hideSticker() {
             overlay.classList.remove('active');
-            setTimeout(() => { overlayImage.src = ""; }, 200); 
+            setTimeout(() => { 
+                overlayImage.src = ""; 
+                overlayImage.className = '';
+            }, 150); 
         }
     </script>
 </body>
